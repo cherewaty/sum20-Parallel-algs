@@ -4,6 +4,13 @@ import (
 	"github.com/gonum/graph"
 )
 
+// Dijkstra ...
+// Runs dijkstra from gonum to make sure that the tests are correct.
+func Dijkstra(s graph.Node, g graph.Graph) Shortest {
+	return DijkstraFrom(s, g)
+}
+
+// BellmanFord ...
 // Apply the bellman-ford algorihtm to Graph and return
 // a shortest path tree.
 //
@@ -15,6 +22,7 @@ func BellmanFord(s graph.Node, g graph.Graph) Shortest {
 	return newShortestFrom(s, g.Nodes())
 }
 
+// DeltaStep ...
 // Apply the delta-stepping algorihtm to Graph and return
 // a shortest path tree.
 //
@@ -24,9 +32,4 @@ func BellmanFord(s graph.Node, g graph.Graph) Shortest {
 func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	// Your code goes here.
 	return newShortestFrom(s, g.Nodes())
-}
-
-// Runs dijkstra from gonum to make sure that the tests are correct.
-func Dijkstra(s graph.Node, g graph.Graph) Shortest {
-	return DijkstraFrom(s, g)
 }
