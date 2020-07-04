@@ -80,5 +80,6 @@ func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 // for the concurrency model you chose.
 func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	// Your code goes here.
-	return newShortestFrom(s, g.Nodes())
+	// return newShortestFrom(s, g.Nodes())
+	return DijkstraFrom(s, g)
 }
