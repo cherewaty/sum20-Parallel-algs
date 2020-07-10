@@ -19,6 +19,7 @@ func Dijkstra(s graph.Node, g graph.Graph) Shortest {
 // for the concurrency model you chose.
 func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 	// Your code goes here.
+	// sequential version from https://github.com/gonum/graph/blob/master/path/bellman_ford_moore.go
 	if !g.Has(u) {
 		return Shortest{from: u}
 	}
@@ -34,6 +35,7 @@ func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 	path = newShortestFrom(u, nodes)
 	path.dist[path.indexOf[u.ID()]] = 0
 
+	// make this parallel
 	for i := 1; i < len(nodes); i++ {
 		changed := false
 		for j, u := range nodes {
