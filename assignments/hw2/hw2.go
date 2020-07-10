@@ -80,6 +80,22 @@ func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 // Note that this uses Shortest to make it easier for you,
 // but you can use another struct if that makes more sense
 // for the concurrency model you chose.
+
+// Bucket ...
+type Bucket struct {
+	nodes []graph.Node
+	index int
+}
+
+/// distance ...
+type distance struct {
+	toIdx   int
+	distNew float64
+	fromIdx int
+	changed bool
+}
+
+// DeltaStep ...
 func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	// Your code goes here.
 	if !g.Has(s) {
@@ -90,29 +106,44 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	var i int = 0 // which bucket are we looking at?
 
 	// initialize bucket data structure
+	var B []Bucket // sequence of buckets
 
 	// relax the source node
-	relax(0, 0)
+	// relax(0, 0)
 
 	// while there are any buckets, do
-	// init structure S for remembering deleted nodes
-	// while Bucket i isn't empty:
-	// find the light edges, store in req
-	// add deleted nodes to S
-	// empty this bucket
-	// relax all the edges in req (parallel)
-	// end while
+	for _, i := range B {
+		// // init structure S for remembering deleted nodes
+		// S := {}
+		// // while Bucket i isn't empty:
+		// for _, j := range B[i].nodes{
+		// 	//req := getReqLight() // find the light edges, store in req
 
-	// find the heavy edges, store in req
-	// relax all the edges in req (parallel)
+		// 	S = append(S, B[i]) 	// add deleted nodes to S
+		// 		// empty this bucket
+		// 	for _, v in req { // relax all the edges in req (parallel)
+		// 			// so relaxed
+		// 	}
+		// }
 
-	i = i + 1 // move on to the next bucket
-
-	// end while
+		// // find the heavy edges
+		// for _, v in req { // relax all the edges in req (parallel)
+		// 	// so relaxed
+		// }
+	}
 
 	return newShortestFrom(s, g.Nodes())
 }
 
-func relax(v int, x int) {
-	// if there's a shorter path, update
+func relax(u graph.Node, v graph.Node, c float64, path Shortest, chnl chan distance, B Bucket) {
+	from := path.indexOf[u.ID()]
+	to := path.indexOf[v.ID()]
+
+	if c < path.dist[path.indexOf[u.ID()]] {
+		chnl <- distance{toIdx: to, distNew: c, fromIdx: from, changed: true}
+		// move to bucket
+		B.nodes = append(B.nodes, v)
+	} else {
+		chnl <- distance{toIdx: to, distNew: c, fromIdx: from, changed: false}
+	}
 }
