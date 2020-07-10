@@ -82,6 +82,37 @@ func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 // for the concurrency model you chose.
 func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	// Your code goes here.
-	// return newShortestFrom(s, g.Nodes())
-	return DijkstraFrom(s, g)
+	if !g.Has(s) {
+		return Shortest{from: s}
+	}
+
+	// delta int = 3
+	var i int = 0 // which bucket are we looking at?
+
+	// initialize bucket data structure
+
+	// relax the source node
+	relax(0, 0)
+
+	// while there are any buckets, do
+	// init structure S for remembering deleted nodes
+	// while Bucket i isn't empty:
+	// find the light edges, store in req
+	// add deleted nodes to S
+	// empty this bucket
+	// relax all the edges in req (parallel)
+	// end while
+
+	// find the heavy edges, store in req
+	// relax all the edges in req (parallel)
+
+	i = i + 1 // move on to the next bucket
+
+	// end while
+
+	return newShortestFrom(s, g.Nodes())
+}
+
+func relax(v int, x int) {
+	// if there's a shorter path, update
 }
