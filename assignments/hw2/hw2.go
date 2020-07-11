@@ -12,13 +12,37 @@ func Dijkstra(s graph.Node, g graph.Graph) Shortest {
 	return DijkstraFrom(s, g)
 }
 
-// BellmanFord ...
 // Apply the bellman-ford algorihtm to Graph and return
 // a shortest path tree.
 //
 // Note that this uses Shortest to make it easier for you,
 // but you can use another struct if that makes more sense
 // for the concurrency model you chose.
+
+// Distance ...
+type distance struct {
+	toIdx   int
+	distNew float64
+	fromIdx int
+	changed bool
+}
+
+// UpdateDist ...
+func UpdateDist(chnl chan distance, u graph.Node, v graph.Node, path Shortest, w float64) {
+	k := path.indexOf[v.ID()]
+	j := path.indexOf[u.ID()]
+	var changed bool
+	joint := path.dist[j] + w
+	if joint < path.dist[k] {
+		changed = true
+		fmt.Println(joint)
+	} else {
+		changed = false
+	}
+	chnl <- distance{toIdx: k, distNew: joint, fromIdx: j, changed: changed}
+}
+
+// BellmanFord ...
 func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 	// Your code goes here.
 	// sequential version from https://github.com/gonum/graph/blob/master/path/bellman_ford_moore.go
@@ -37,20 +61,31 @@ func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 	path = newShortestFrom(u, nodes)
 	path.dist[path.indexOf[u.ID()]] = 0
 
-	// make this parallel
+	chnl := make(chan distance)
+
 	for i := 1; i < len(nodes); i++ {
 		changed := false
-		for j, u := range nodes {
+		for _, u := range nodes {
 			for _, v := range g.From(u) {
-				k := path.indexOf[v.ID()]
 				w, ok := weight(u, v)
 				if !ok {
 					panic("bellman-ford: unexpected invalid weight")
 				}
-				joint := path.dist[j] + w
-				if joint < path.dist[k] {
-					path.set(k, joint, j)
-					changed = true
+				if w < 0 {
+					panic("bellman-ford: negative weight")
+				}
+				go UpdateDist(chnl, u, v, path, w)
+			}
+			for range g.From(u) {
+				dist, ok := <-chnl
+				fmt.Println(dist)
+				if !ok {
+					panic("bellman-ford: bad channel read")
+					// fmt.Println(v)
+				}
+				changed = dist.changed
+				if changed {
+					path.set(dist.toIdx, dist.distNew, dist.fromIdx)
 				}
 			}
 		}
@@ -59,19 +94,20 @@ func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 		}
 	}
 
-	for j, u := range nodes {
-		for _, v := range g.From(u) {
-			k := path.indexOf[v.ID()]
-			w, ok := weight(u, v)
-			if !ok {
-				panic("bellman-ford: unexpected invalid weight")
-			}
-			if path.dist[j]+w < path.dist[k] {
-				return path
-			}
-		}
-	}
-
+	//	for j, u := range nodes {
+	//		for _, v := range g.From(u) {
+	//			k := path.indexOf[v.ID()]
+	//			w, ok := weight(u, v)
+	//			if !ok {
+	//				panic("bellman-ford: unexpected invalid weight")
+	//			}
+	///			if path.dist[j]+w < path.dist[k] {
+	//			return path
+	//		}
+	//	}
+	//	}
+	close(chnl)
+	// fmt.Println("BELLMAN FORD: ",path.dist)
 	return path
 }
 
@@ -85,14 +121,6 @@ func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 // Bucket ...
 type Bucket struct {
 	nodes []graph.Node
-}
-
-/// distance ...
-type distance struct {
-	toIdx   int
-	distNew float64
-	fromIdx int
-	changed bool
 }
 
 // DELTA hyperparameter
