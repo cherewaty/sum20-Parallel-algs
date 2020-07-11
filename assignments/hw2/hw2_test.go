@@ -1,10 +1,11 @@
 package hw2
 
 import (
-	"github.com/gonum/graph"
 	"math"
 	"reflect"
 	"testing"
+
+	"github.com/gonum/graph"
 )
 
 func Test(t *testing.T) {
