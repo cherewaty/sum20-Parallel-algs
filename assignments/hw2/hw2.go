@@ -135,12 +135,21 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 
 	// initialize bucket data structure
 	var B []Bucket // sequence of buckets
+	allNodes := g.Nodes()
+	path := newShortestFrom(s, g.Nodes())
+	requestedChannel := make(chan distance)
 
 	// relax the source node
-	path := newShortestFrom(s, g.Nodes())
-	relax(s, s, 0, path, B)
-
-	allNodes := g.Nodes()
+	for _, i := range g.From(s) {
+		go firstNodeRelax(s, i, requestedChannel, g, path)
+	}
+	for range g.From(s) {
+		requested := <-requestedChannel
+		if requested.changed {
+			relax(allNodes[requested.fromIdx], allNodes[requested.toIdx], float64(requested.distNew), path, B)
+			path.set(requested.toIdx, requested.distNew, requested.fromIdx)
+		}
+	}
 
 	// while there are any buckets, do
 	for bucketIndex, bucket := range B {
@@ -148,11 +157,9 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 		var S Bucket // kinda of a faux bucket
 		S.nodes = nil
 
-		requestedChannel := make(chan distance)
-
 		// while Bucket i isn't empty:
 		for len(bucket.nodes) != 0 {
-			getReqLight(bucketIndex, bucket, path, g, requestedChannel) // find the light edges
+			go getReqLight(bucketIndex, bucket, path, g, requestedChannel) // find the light edges
 
 			// add deleted nodes to S
 			for _, bucketNode := range bucket.nodes {
@@ -171,7 +178,7 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 			}
 		}
 
-		getReqHeavy(bucketIndex, S, path, g, requestedChannel) // find the heavy edges
+		go getReqHeavy(bucketIndex, S, path, g, requestedChannel) // find the heavy edges
 		for range bucket.nodes {
 			requested := <-requestedChannel
 			if requested.changed {
@@ -180,7 +187,7 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 			}
 		}
 	}
-
+	fmt.Println("DELTA STEPPING: ", path.dist)
 	return path
 }
 
@@ -209,12 +216,14 @@ func evaluateLight(from graph.Node, to graph.Node, path Shortest, g graph.Graph,
 	}
 
 	w, ok := weight(from, to)
-
+	if w < 0 {
+		panic("Delta Step: Negative Weight")
+	}
 	if ok {
 		if w <= DELTA { // is it light?
-			channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[to.ID()]], fromIdx: path.indexOf[from.ID()], changed: true}
+			channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[from.ID()]], fromIdx: path.indexOf[from.ID()], changed: true}
 		} else {
-			channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[to.ID()]], fromIdx: path.indexOf[from.ID()], changed: false}
+			channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[from.ID()]], fromIdx: path.indexOf[from.ID()], changed: false}
 		}
 	}
 }
@@ -236,7 +245,9 @@ func evaluateHeavy(from graph.Node, to graph.Node, path Shortest, g graph.Graph,
 	}
 
 	w, ok := weight(from, to)
-
+	if w < 0 {
+		panic("Delta Step: Negative Weight")
+	}
 	if ok {
 		if w > DELTA { // is it heavy?
 			channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[to.ID()]], fromIdx: path.indexOf[from.ID()], changed: true}
@@ -264,4 +275,20 @@ func moveNodeToNewBucket(buckets []Bucket, bucketIndex int, node graph.Node) {
 
 	// add to its new bucket
 	buckets[bucketIndex].nodes = append(buckets[bucketIndex].nodes, node)
+	fmt.Println(buckets[bucketIndex].nodes)
+}
+
+func firstNodeRelax(s graph.Node, to graph.Node, channel chan distance, g graph.Graph, path Shortest) {
+	var weight Weighting
+	if wg, ok := g.(graph.Weighter); ok {
+		weight = wg.Weight
+	} else {
+		weight = UniformCost(g)
+	}
+
+	w, ok := weight(s, to)
+
+	if ok {
+		channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[s.ID()]], fromIdx: path.indexOf[s.ID()], changed: true}
+	}
 }
