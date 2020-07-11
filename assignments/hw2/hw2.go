@@ -109,11 +109,11 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	var B []Bucket // sequence of buckets
 
 	// set up the channel
-	chnl := make(chan distance)
+	// chnl := make(chan distance)
 
 	// relax the source node
 	path := newShortestFrom(s, g.Nodes())
-	relax(s, s, 0, path, chnl, B)
+	relax(s, s, 0, path, B)
 
 	// while there are any buckets, do
 	for bucketIndex, bucket := range B {
@@ -123,15 +123,24 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 
 		fmt.Println(S)
 
+		requestedChannel := make(chan distance)
+
 		// while Bucket i isn't empty:
 		for len(bucket.nodes) != 0 {
-			getReqLight(bucketIndex, bucket, path, g) // find the light edges, store in req
+			getReqLight(bucketIndex, bucket, path, g, requestedChannel) // find the light edges, store in req
 
 			// 	S = append(S, B[i]) 	// add deleted nodes to S
 			// 		// empty this bucket
 			// 	for _, v in req { // relax all the edges in req (parallel)
 			// 			// so relaxed
 			// 	}
+
+			for range bucket.nodes {
+				requested := <-requestedChannel
+				if requested.changed {
+					// relax(requested.fromIdx, requested.toIdx, float64(requested.distNew), path, B)
+				}
+			}
 		}
 
 		// // find the heavy edges
@@ -143,34 +152,37 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	return newShortestFrom(s, g.Nodes())
 }
 
-func relax(u graph.Node, v graph.Node, c float64, path Shortest, chnl chan distance, B []Bucket) {
+func relax(u graph.Node, v graph.Node, c float64, path Shortest, B []Bucket) {
 
-	from := path.indexOf[u.ID()]
-	to := path.indexOf[v.ID()]
+	// from := path.indexOf[u.ID()]
+	// to := path.indexOf[v.ID()]
 
 	if c < path.dist[path.indexOf[u.ID()]] {
-		chnl <- distance{toIdx: to, distNew: c, fromIdx: from, changed: true}
-		// move to bucket
+		// chnl <- distance{toIdx: to, distNew: c, fromIdx: from, changed: true}
+		// what bucket should it be in?
 		bucketIndex := int(c / DELTA)
+		// add to its new bucket
 		B[bucketIndex].nodes = append(B[bucketIndex].nodes, v)
+		// remove from its old bucket, if it's in one
+		// path.dist[to]
 
-	} else {
-		chnl <- distance{toIdx: to, distNew: c, fromIdx: from, changed: false}
+		// } else {
+		// 	chnl <- distance{toIdx: to, distNew: c, fromIdx: from, changed: false}
 	}
 }
 
-func getReqLight(bucketIndex int, bucket Bucket, path Shortest, g graph.Graph) {
+func getReqLight(bucketIndex int, bucket Bucket, path Shortest, g graph.Graph, requested chan distance) {
 	// make a channel
-	lightChannel := make(chan graph.Node)
+	// lightChannel := make(chan distance)
 
 	for _, from := range bucket.nodes {
 		for _, to := range g.From(from) {
-			evaluateLight(from, to, path, g, bucket.nodes, bucketIndex, lightChannel)
+			evaluateLight(from, to, path, g, bucket.nodes, bucketIndex, requested)
 		}
 	}
 }
 
-func evaluateLight(from graph.Node, to graph.Node, path Shortest, g graph.Graph, bucketNodes []graph.Node, bucketIndex int, channel chan graph.Node) {
+func evaluateLight(from graph.Node, to graph.Node, path Shortest, g graph.Graph, bucketNodes []graph.Node, bucketIndex int, channel chan distance) {
 	var weight Weighting
 	if wg, ok := g.(graph.Weighter); ok {
 		weight = wg.Weight
@@ -182,7 +194,9 @@ func evaluateLight(from graph.Node, to graph.Node, path Shortest, g graph.Graph,
 
 	if ok {
 		if w <= DELTA { // is it light?
-			channel <- to
+			channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[to.ID()]], fromIdx: path.indexOf[from.ID()], changed: true}
+		} else {
+			channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[to.ID()]], fromIdx: path.indexOf[from.ID()], changed: false}
 		}
 	}
 }
