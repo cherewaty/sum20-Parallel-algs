@@ -145,22 +145,22 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	// while there are any buckets, do
 	for bucketIndex, bucket := range B {
 		// // init structure S for remembering deleted nodes
-		var S []graph.Node
-		S = nil
-
-		fmt.Println(S)
+		var S Bucket // kinda of a faux bucket
+		S.nodes = nil
 
 		requestedChannel := make(chan distance)
 
 		// while Bucket i isn't empty:
 		for len(bucket.nodes) != 0 {
-			getReqLight(bucketIndex, bucket, path, g, requestedChannel) // find the light edges, store in req
+			getReqLight(bucketIndex, bucket, path, g, requestedChannel) // find the light edges
 
-			// 	S = append(S, B[i]) 	// add deleted nodes to S
-			// 		// empty this bucket
-			// 	for _, v in req { // relax all the edges in req (parallel)
-			// 			// so relaxed
-			// 	}
+			// add deleted nodes to S
+			for _, bucketNode := range bucket.nodes {
+				S.nodes = append(S.nodes, bucketNode)
+			}
+
+			// empty this bucket
+			bucket.nodes = nil
 
 			for range bucket.nodes {
 				requested := <-requestedChannel
@@ -171,35 +171,28 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 			}
 		}
 
-		// // find the heavy edges
-		// for _, v in req { // relax all the edges in req (parallel)
-		// 	// so relaxed
-		// }
+		getReqHeavy(bucketIndex, S, path, g, requestedChannel) // find the heavy edges
+		for range bucket.nodes {
+			requested := <-requestedChannel
+			if requested.changed {
+				relax(allNodes[requested.fromIdx], allNodes[requested.toIdx], float64(requested.distNew), path, B)
+				path.set(requested.toIdx, requested.distNew, requested.fromIdx)
+			}
+		}
 	}
 
-	return newShortestFrom(s, g.Nodes())
+	return path
 }
 
 func relax(u graph.Node, v graph.Node, c float64, path Shortest, B []Bucket) {
-
-	// from := path.indexOf[u.ID()]
-	// to := path.indexOf[v.ID()]
-
 	if c < path.dist[path.indexOf[u.ID()]] {
-		// chnl <- distance{toIdx: to, distNew: c, fromIdx: from, changed: true}
 		// what bucket should it be in?
 		bucketIndex := int(c / DELTA)
-		// add to its new bucket
-		B[bucketIndex].nodes = append(B[bucketIndex].nodes, v)
-		// remove from its old bucket, if it's in one
-		removeNodeFromBucket(B[bucketIndex], v)
+		moveNodeToNewBucket(B, bucketIndex, v)
 	}
 }
 
 func getReqLight(bucketIndex int, bucket Bucket, path Shortest, g graph.Graph, requested chan distance) {
-	// make a channel
-	// lightChannel := make(chan distance)
-
 	for _, from := range bucket.nodes {
 		for _, to := range g.From(from) {
 			evaluateLight(from, to, path, g, bucket.nodes, bucketIndex, requested)
@@ -226,19 +219,49 @@ func evaluateLight(from graph.Node, to graph.Node, path Shortest, g graph.Graph,
 	}
 }
 
-func findIndex(bucket Bucket, node graph.Node) int {
-	for i, searchNode := range bucket.nodes {
-		if searchNode.ID() == node.ID() {
-			return i
+func getReqHeavy(bucketIndex int, s Bucket, path Shortest, g graph.Graph, requested chan distance) {
+	for _, from := range s.nodes {
+		for _, to := range g.From(from) {
+			evaluateHeavy(from, to, path, g, s.nodes, bucketIndex, requested)
 		}
 	}
-	return -1
 }
 
-func removeNodeFromBucket(bucket Bucket, node graph.Node) {
-	index := findIndex(bucket, node)
-
-	if index == -1 {
-		return
+func evaluateHeavy(from graph.Node, to graph.Node, path Shortest, g graph.Graph, sNodes []graph.Node, bucketIndex int, channel chan distance) {
+	var weight Weighting
+	if wg, ok := g.(graph.Weighter); ok {
+		weight = wg.Weight
+	} else {
+		weight = UniformCost(g)
 	}
+
+	w, ok := weight(from, to)
+
+	if ok {
+		if w > DELTA { // is it heavy?
+			channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[to.ID()]], fromIdx: path.indexOf[from.ID()], changed: true}
+		} else {
+			channel <- distance{toIdx: path.indexOf[to.ID()], distNew: w + path.dist[path.indexOf[to.ID()]], fromIdx: path.indexOf[from.ID()], changed: false}
+		}
+	}
+}
+
+func removeNodeFromBuckets(buckets []Bucket, node graph.Node) {
+	for _, bucket := range buckets {
+		for i, searchNode := range bucket.nodes {
+			if searchNode.ID() == node.ID() {
+				// remove it!
+				copy(bucket.nodes[i:], bucket.nodes[i+1:])
+				bucket.nodes[len(bucket.nodes)-1] = nil
+			}
+		}
+	}
+}
+
+func moveNodeToNewBucket(buckets []Bucket, bucketIndex int, node graph.Node) {
+	// remove from its old bucket, if it's in one
+	removeNodeFromBuckets(buckets, node)
+
+	// add to its new bucket
+	buckets[bucketIndex].nodes = append(buckets[bucketIndex].nodes, node)
 }
