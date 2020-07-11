@@ -1,6 +1,8 @@
 package hw2
 
 import (
+	"fmt"
+
 	"github.com/gonum/graph"
 )
 
@@ -73,7 +75,6 @@ func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 	return path
 }
 
-// DeltaStep ...
 // Apply the delta-stepping algorihtm to Graph and return
 // a shortest path tree.
 //
@@ -84,7 +85,6 @@ func BellmanFord(u graph.Node, g graph.Graph) (path Shortest) {
 // Bucket ...
 type Bucket struct {
 	nodes []graph.Node
-	index int
 }
 
 /// distance ...
@@ -95,6 +95,9 @@ type distance struct {
 	changed bool
 }
 
+// DELTA hyperparameter
+const DELTA float64 = 3
+
 // DeltaStep ...
 func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	// Your code goes here.
@@ -102,29 +105,34 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 		return Shortest{from: s}
 	}
 
-	// delta int = 3
-	var i int = 0 // which bucket are we looking at?
-
 	// initialize bucket data structure
 	var B []Bucket // sequence of buckets
 
+	// set up the channel
+	chnl := make(chan distance)
+
 	// relax the source node
-	// relax(0, 0)
+	path := newShortestFrom(s, g.Nodes())
+	relax(s, s, 0, path, chnl, B)
 
 	// while there are any buckets, do
-	for _, i := range B {
+	for bucketIndex, bucket := range B {
 		// // init structure S for remembering deleted nodes
-		// S := {}
-		// // while Bucket i isn't empty:
-		// for _, j := range B[i].nodes{
-		// 	//req := getReqLight() // find the light edges, store in req
+		var S []graph.Node
+		S = nil
 
-		// 	S = append(S, B[i]) 	// add deleted nodes to S
-		// 		// empty this bucket
-		// 	for _, v in req { // relax all the edges in req (parallel)
-		// 			// so relaxed
-		// 	}
-		// }
+		fmt.Println(S)
+
+		// while Bucket i isn't empty:
+		for len(bucket.nodes) != 0 {
+			getReqLight(bucketIndex, bucket, path, g) // find the light edges, store in req
+
+			// 	S = append(S, B[i]) 	// add deleted nodes to S
+			// 		// empty this bucket
+			// 	for _, v in req { // relax all the edges in req (parallel)
+			// 			// so relaxed
+			// 	}
+		}
 
 		// // find the heavy edges
 		// for _, v in req { // relax all the edges in req (parallel)
@@ -135,15 +143,46 @@ func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	return newShortestFrom(s, g.Nodes())
 }
 
-func relax(u graph.Node, v graph.Node, c float64, path Shortest, chnl chan distance, B Bucket) {
+func relax(u graph.Node, v graph.Node, c float64, path Shortest, chnl chan distance, B []Bucket) {
+
 	from := path.indexOf[u.ID()]
 	to := path.indexOf[v.ID()]
 
 	if c < path.dist[path.indexOf[u.ID()]] {
 		chnl <- distance{toIdx: to, distNew: c, fromIdx: from, changed: true}
 		// move to bucket
-		B.nodes = append(B.nodes, v)
+		bucketIndex := int(c / DELTA)
+		B[bucketIndex].nodes = append(B[bucketIndex].nodes, v)
+
 	} else {
 		chnl <- distance{toIdx: to, distNew: c, fromIdx: from, changed: false}
+	}
+}
+
+func getReqLight(bucketIndex int, bucket Bucket, path Shortest, g graph.Graph) {
+	// make a channel
+	lightChannel := make(chan graph.Node)
+
+	for _, from := range bucket.nodes {
+		for _, to := range g.From(from) {
+			evaluateLight(from, to, path, g, bucket.nodes, bucketIndex, lightChannel)
+		}
+	}
+}
+
+func evaluateLight(from graph.Node, to graph.Node, path Shortest, g graph.Graph, bucketNodes []graph.Node, bucketIndex int, channel chan graph.Node) {
+	var weight Weighting
+	if wg, ok := g.(graph.Weighter); ok {
+		weight = wg.Weight
+	} else {
+		weight = UniformCost(g)
+	}
+
+	w, ok := weight(from, to)
+
+	if ok {
+		if w <= DELTA { // is it light?
+			channel <- to
+		}
 	}
 }
